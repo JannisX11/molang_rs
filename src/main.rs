@@ -40,6 +40,10 @@ mod tests {
 		assert_eq!(run("1+1"), 2.0);
 	}
 	#[test]
+	fn sign() {
+		assert_eq!(run("2*-(2/2)"), -2.0);
+	}
+	#[test]
 	fn order_of_operation() {
 		assert_eq!(run("1 + 1 * 2"), 3.0);
 	}
@@ -49,7 +53,7 @@ mod tests {
 	}
 	#[test]
 	fn float_type_notation() {
-		assert_eq!(run("10 * -0.2f",), 2.0);
+		assert_eq!(run("10 * 0.2f",), 2.0);
 	}
 	#[test]
 	fn order_of_division() {

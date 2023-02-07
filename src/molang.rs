@@ -1,10 +1,82 @@
 use std::{collections::HashMap, convert::TryInto};
 use regex::Regex;
-use rand::Rng;
 
+mod math {
+	use rand::Rng;
+
+	pub fn random(a: f64, b: f64) -> f64 {
+		let mut rng = rand::thread_rng();
+		rng.gen_range(a..b)
+	}
+
+	pub fn random_int(a: f64, b: f64) -> f64 {
+		let mut rng = rand::thread_rng();
+		rng.gen_range(a..(b+1.0)).floor()
+	}
+
+	pub fn die_roll(num: f64, low: f64, high: f64) -> f64 {
+		let iterations = num.max(0.0) as i32;
+		let mut sum = 0.0;
+		for _i in 0..iterations {
+			sum += random(low, high);
+		}
+		return sum;
+	}
+
+	pub fn die_roll_int(num: f64, low: f64, high: f64) -> f64 {
+		let iterations = num.max(0.0) as i32;
+		let mut sum = 0.0;
+		for _i in 0..iterations {
+			sum += random_int(low, high);
+		}
+		return sum;
+	}
+
+	pub fn lerp(start: f64, end: f64, lerp: f64) -> f64 {
+		return start + (end - start) * lerp;
+	}
+
+	fn radify(num: f64) -> f64 {
+		(((num + 180.0) % 360.0) +180.0) % 360.0
+	}
+
+	pub fn lerp_rotate(start: f64, end: f64, lerp: f64) -> f64 {
+		let mut a = radify(start);
+		let mut b = radify(end);
+
+		if a > b {
+			let x = a.clone();
+			a = b;
+			b = x;
+		}
+		let diff = b - a;
+		if diff > 180.0 {
+			return radify(b + lerp * (360.0-diff));
+		} else {
+			return a + lerp * diff;
+		}
+	}
+	
+	pub fn in_range(value: f64, min: f64, max: f64) -> f64 {
+		if value <= max && value >= min {1.0} else {0.0}
+	}
+
+	/*pub fn all(value: f64, ...to_compare) {
+		return (to_compare.findIndex(c => c !== value) === -1) {1.0} else {0.0};
+	}
+
+	pub fn any(value: f64, ...to_compare) {
+		return to_compare.findIndex(c => c == value) >= 0 {1.0} else {0.0};
+	}
+
+	pub fn approx_eq(value: f64, ...to_compare) {
+		return (to_compare.findIndex(c => Math.abs(value - c) > 0.0000001) === -1) {1.0} else {0.0};
+	}*/
+}
 
 static ANGLE_FACTOR: f64 = std::f64::consts::PI / 180.0;
 
+// Operation Types
 #[derive(Debug)]
 enum OperationType {
 	Add,
@@ -50,17 +122,16 @@ enum OperationType {
 	HermiteBlend,
 	RandomInt,
 }
-
 // Tree Types
 #[derive(Debug)]
 enum Expression {
 	Number(f64),
-	String(String),
+	//String(String),
 	Operation1(OperationType, Box<Expression>),
 	Operation2(OperationType, Box<Expression>, Box<Expression>),
 	Operation3(OperationType, Box<Expression>, Box<Expression>, Box<Expression>),
 	Variable(String),
-	QueryFunction(String),
+	//QueryFunction(String),
 	Allocation(String, Box<Expression>),
 	ReturnStatement(Box<Expression>),
 	Loop(Box<Expression>, Box<Expression>),
@@ -68,13 +139,13 @@ enum Expression {
 }
 
 fn create_operation_1(op_type: OperationType, s1: &str) -> Expression {
-	Expression::Operation1(op_type, Box::new(iterate_string(s1)))
+	Expression::Operation1(op_type, Box::new(parse_string_slice(s1)))
 }
 fn create_operation_2(op_type: OperationType, s1: &str, s2: &str) -> Expression {
-	Expression::Operation2(op_type, Box::new(iterate_string(s1)), Box::new(iterate_string(s2)))
+	Expression::Operation2(op_type, Box::new(parse_string_slice(s1)), Box::new(parse_string_slice(s2)))
 }
 fn create_operation_3(op_type: OperationType, s1: &str, s2: &str, s3: &str) -> Expression {
-	Expression::Operation3(op_type, Box::new(iterate_string(s1)), Box::new(iterate_string(s2)), Box::new(iterate_string(s3)))
+	Expression::Operation3(op_type, Box::new(parse_string_slice(s1)), Box::new(parse_string_slice(s2)), Box::new(parse_string_slice(s3)))
 }
 
 fn to_variable_name(input: &str) -> String {
@@ -92,18 +163,102 @@ fn to_variable_name(input: &str) -> String {
 }
 
 
+// String parsing utility
+
+const BRACKET_OPEN: char = '(';
+const BRACKET_CLOSE: char = ')';
+const CURLY_BRACKET_OPEN: char = '{';
+const CURLY_BRACKET_CLOSE: char = '}';
+
+fn split_string<'a>(s: &'a str, c: &str) -> Option<(&'a str, &'a str)> {
+    if !s.contains(c) {
+        return None;
+    }
+    let mut level: i8 = 0;
+    for (i, ch) in s.char_indices() {
+        if ch == BRACKET_OPEN || ch == CURLY_BRACKET_OPEN {
+            level += 1;
+        } else if ch == BRACKET_CLOSE || ch == CURLY_BRACKET_CLOSE {
+            level -= 1;
+        } else if level == 0 && c.starts_with(ch) {
+            if c.len() == 1 || &s[i..i+c.len()] == c {
+                return Some((&s[..i], &s[i+c.len()..]));
+            }
+        }
+    }
+    None
+}
+
+fn split_string_reverse<'a>(s: &'a str, c: &str) -> Option<(&'a str, &'a str)> {
+    if !s.contains(c) {
+        return None;
+    }
+    let mut level: i8 = 0;
+    for i in (0..s.len()).rev() {
+        let ch = s.chars().nth(i).unwrap();
+        if ch == BRACKET_OPEN || ch == CURLY_BRACKET_OPEN {
+            level -= 1;
+        } else if ch == BRACKET_CLOSE || ch == CURLY_BRACKET_CLOSE {
+            level += 1;
+        } else if level == 0 && c.starts_with(ch) {
+            if c.len() == 1 || &s[i..i+c.len()] == c {
+				if c != "-" || i == 0 || "+*/<>=|&?:".contains(s.chars().nth(i).unwrap_or(' ')) {
+					return Some((&s[..i], &s[i+c.len()..]));
+				}
+            }
+        }
+    }
+    None
+}
+fn split_string_multiple<'a>(s: &'a str, c: &str) -> Vec<&'a str> {
+    if !s.contains(c) {
+        return vec![s];
+    }
+	let c_len = c.len();
+	let mut pieces = Vec::new();
+    let mut level: i8 = 0;
+	let mut last_split = 0;
+
+    for (i, ch) in s.char_indices() {
+		match ch {
+			BRACKET_OPEN|CURLY_BRACKET_OPEN => {level += 1},
+			BRACKET_CLOSE|CURLY_BRACKET_CLOSE => {level -= 1},
+			_ => {
+				if level == 0 && c.starts_with(ch) {
+					if c_len == 1 || &s[i..i+c_len] == c {
+						let piece = &s[last_split..i];
+						pieces.push(piece);
+						last_split = i + c_len;
+						if s[last_split..].contains(c) == false {break;}
+					}
+				}
+			}
+		}
+    }
+	pieces.push(&s[last_split..]);
+	pieces
+	
+}
+fn compare_values(a: &Expression, b: &Expression, variables: &mut HashMap<String, f64>) -> bool {
+	let result_a = a.eval(variables);
+	let result_b = b.eval(variables);
+	//if (!(typeof a == 'string' && a[0] == `'`)) a = eval(a, true);
+	//if (!(typeof b == 'string' && b[0] == `'`)) b = eval(b, true);
+	return result_a == result_b;
+}
+
 static STRING_NUMBER_REGEX: &str = r"^-?\d+(\.\d+f?)?$";
 fn is_string_number(s: &str) -> bool {
 	Regex::new(STRING_NUMBER_REGEX).unwrap().is_match(s)
 }
 
 fn can_trim_brackets(s: &str) -> bool {
-	if s.starts_with('(') && s.ends_with(')') {
+	if (s.starts_with(BRACKET_OPEN) && s.ends_with(BRACKET_CLOSE)) || (s.starts_with(CURLY_BRACKET_OPEN) && s.ends_with(CURLY_BRACKET_CLOSE)) {
 		let mut level: i8 = 1;
 		for c in s[1..s.len()-1].chars() {
 			match c {
-				'(' => level += 1,
-				')' => level -= 1,
+				BRACKET_OPEN|CURLY_BRACKET_OPEN => level += 1,
+				BRACKET_CLOSE|CURLY_BRACKET_CLOSE => level -= 1,
 				_ => {}
 			}
 			if level == 0 {
@@ -122,7 +277,7 @@ fn trim_brackets(input: &str) -> &str {
 	}
 }
 
-fn iterate_string(input: &str) -> Expression {
+fn parse_string_slice(input: &str) -> Expression {
 	if input.len() == 0 {
 		return Expression::Number(0.0);
 	}
@@ -143,7 +298,7 @@ fn iterate_string(input: &str) -> Expression {
 	if lines.len() > 1 {
 		let mut expressions = Vec::new();
 		for line in lines.iter() {
-			let exp = iterate_string(&line);
+			let exp = parse_string_slice(&line);
 			let is_return = matches!(exp, Expression::ReturnStatement(_));
 			expressions.push(exp);
 			if is_return {break;}
@@ -153,7 +308,7 @@ fn iterate_string(input: &str) -> Expression {
 
 	//Statement
 	if s.starts_with("return") {
-		return Expression::ReturnStatement(Box::new(iterate_string(&s[6..])));
+		return Expression::ReturnStatement(Box::new(parse_string_slice(&s[6..])));
 	}
 
 	match s {
@@ -169,13 +324,14 @@ fn iterate_string(input: &str) -> Expression {
 
 	//allocation
 	if has_equal_sign && s.len() > 4 {
-		let mat = Regex::new(r"(temp|variable|t|v)\.\w+=").unwrap().find(s);
+		let mat = Regex::new(r"^(temp|variable|t|v)\.\w+=").unwrap().find(s);
 		match mat {
 			Some(result) => {
+
 				if &s[result.end()..result.end() + 1] != "=" {
 					let name = &s[..result.end() - 1];
 					let value = &s[result.end()..];
-					return Expression::Allocation(to_variable_name(name), Box::new(iterate_string(&value)));
+					return Expression::Allocation(to_variable_name(name), Box::new(parse_string_slice(&value)));
 				}
 			},
 			None => ()
@@ -247,7 +403,7 @@ fn iterate_string(input: &str) -> Expression {
 		Some(result) => { return create_operation_2(OperationType::Add, result.0, result.1); },
 		None => ()
 	}
-	match split_string(s, "-") {
+	match split_string_reverse(s, "-") {
 		Some(result) => {
 			if result.0.len() == 0 {
 				return create_operation_1(OperationType::Invert, result.1);
@@ -334,8 +490,8 @@ fn iterate_string(input: &str) -> Expression {
 		let params = split_string_multiple(inner, ",");
 		if params.len() >= 2 {
 			return Expression::Loop(
-				Box::new(iterate_string(params[0])),
-				Box::new(iterate_string(params[1]))
+				Box::new(parse_string_slice(params[0])),
+				Box::new(parse_string_slice(params[1]))
 			);
 		}
 	}
@@ -343,7 +499,7 @@ fn iterate_string(input: &str) -> Expression {
 	/*split = s.match(/[a-z0-9._]{2,}/g)
 	if (split && split.length === 1 && split[0].length >= s.length-2) {
 		return s;
-	} else if (s.includes('(') && s[s.length-1] == ')') {
+	} else if (s.includes(BRACKET_OPEN) && s[s.length-1] == ')') {
 		let begin = s.search(/\(/);
 		let query_name = s.substr(0, begin);
 		let inner = s.substr(begin+1, s.length-begin-2)
@@ -358,91 +514,13 @@ fn iterate_string(input: &str) -> Expression {
 }
 
 
-
-
-const BRACKET_OPEN: char = '(';
-const BRACKET_CLOSE: char = ')';
-
-fn split_string<'a>(s: &'a str, c: &str) -> Option<(&'a str, &'a str)> {
-    if !s.contains(c) {
-        return None;
-    }
-    let mut level: i8 = 0;
-    for (i, ch) in s.char_indices() {
-        if ch == BRACKET_OPEN {
-            level += 1;
-        } else if ch == BRACKET_CLOSE {
-            level -= 1;
-        } else if level == 0 && c.starts_with(ch) {
-            if c.len() == 1 || &s[i..i+c.len()] == c {
-                return Some((&s[..i], &s[i+c.len()..]));
-            }
-        }
-    }
-    None
-}
-fn split_string_reverse<'a>(s: &'a str, c: &str) -> Option<(&'a str, &'a str)> {
-    if !s.contains(c) {
-        return None;
-    }
-    let mut level: i8 = 0;
-    for i in (0..s.len()).rev() {
-        let ch = s.chars().nth(i).unwrap();
-        if ch == BRACKET_OPEN {
-            level -= 1;
-        } else if ch == BRACKET_CLOSE {
-            level += 1;
-        } else if level == 0 && c.starts_with(ch) {
-            if c.len() == 1 || &s[i..i+c.len()] == c {
-                return Some((&s[..i], &s[i+c.len()..]));
-            }
-        }
-    }
-    None
-}
-fn split_string_multiple<'a>(s: &'a str, c: &str) -> Vec<&'a str> {
-    if !s.contains(c) {
-        return vec![s];
-    }
-	let c_len = c.len();
-	let mut pieces = Vec::new();
-    let mut level: i8 = 0;
-	let mut last_split = 0;
-
-    for (i, ch) in s.char_indices() {
-		match ch {
-			BRACKET_OPEN => {level += 1},
-			BRACKET_CLOSE => {level -= 1},
-			_ => {
-				if level == 0 && c.starts_with(ch) {
-					if c_len == 1 || &s[i..i+c_len] == c {
-						let piece = &s[last_split..i];
-						pieces.push(piece);
-						last_split = i + c_len;
-						if s[last_split..].contains(c) == false {break;}
-					}
-				}
-			}
-		}
-    }
-	pieces.push(&s[last_split..]);
-	pieces
-	
-}
-fn compare_values(a: &Expression, b: &Expression, variables: &mut HashMap<String, f64>) -> bool {
-	let result_a = a.eval(variables);
-	let result_b = b.eval(variables);
-	//if (!(typeof a == 'string' && a[0] == `'`)) a = eval(a, true);
-	//if (!(typeof b == 'string' && b[0] == `'`)) b = eval(b, true);
-	return result_a == result_b;
-}
 impl Expression {
 	fn eval(&self, variables: &mut HashMap<String, f64>) -> f64 {
 		match self {
 			Expression::Number(num) => num.to_owned(),
-			Expression::String(_string) => {
+			/*Expression::String(_string) => {
 				0.0
-			},
+			},*/
 			Expression::Operation1(o_type, a) => {
 				let a_result = a.eval(variables);
 				match o_type {
@@ -488,18 +566,12 @@ impl Expression {
 						0.0
 					},
 					OperationType::Pow => a_result.powf(b_result),
-					OperationType::Random => {
-						let mut rng = rand::thread_rng();
-						rng.gen_range(a_result..b_result)
-					},
+					OperationType::Random => math::random(a_result, b_result),
 					OperationType::Modulo => a_result % b_result,
 					OperationType::Min => a_result.min(b_result),
 					OperationType::Max => a_result.max(b_result),
-					OperationType::Atan2 => a_result.atan2(b_result),
-					OperationType::RandomInt => {
-						let mut rng = rand::thread_rng();
-						rng.gen_range(a_result..(b_result+1.0)).floor()
-					},
+					OperationType::Atan2 => a_result.atan2(b_result) * ANGLE_FACTOR,
+					OperationType::RandomInt => math::random_int(a_result, b_result),
 					OperationType::Ternary => if a_result != 0.0 {b_result} else {0.0},
 					_ => 0.0
 				}
@@ -510,10 +582,10 @@ impl Expression {
 				let c_result = c.eval(variables);
 				match o_type {
 					OperationType::Clamp => a_result.clamp(b_result, c_result),
-					OperationType::Lerp => a_result, //todo
-					OperationType::Lerprotate => a_result, //todo
-					OperationType::Dieroll => a_result, //todo
-					OperationType::DierollInt => a_result, //todo
+					OperationType::Lerp => math::lerp(a_result, b_result, c_result),
+					OperationType::Lerprotate => math::lerp_rotate(a_result, b_result, c_result),
+					OperationType::Dieroll => math::die_roll(a_result, b_result, c_result),
+					OperationType::DierollInt => math::die_roll_int(a_result, b_result, c_result),
 					OperationType::Ternary => if a_result != 0.0 {b_result} else {c_result},
 					_ => 0.0
 				}
@@ -529,9 +601,9 @@ impl Expression {
 					}
 				}
 			},
-			Expression::QueryFunction(a) => {
+			/*Expression::QueryFunction(a) => {
 				0.0
-			},
+			},*/
 			Expression::Allocation(a, b) => {
 				let value = b.eval(variables);
 				variables.insert(a.clone(), value);
@@ -559,11 +631,11 @@ impl Expression {
 	}
 }
 
-fn create_expression(string: String) -> Expression {
+fn create_expression_tree(string: &str) -> Expression {
 	
-	let input = string.clone().replace(' ', "").to_lowercase();
+	let input = string.replace(' ', "").to_lowercase();
 
-	let expression = iterate_string(&input);
+	let expression = parse_string_slice(&input);
 	//println!("Expression: {:?}", expression);
 	expression
 
@@ -592,7 +664,7 @@ impl MolangParser {
 		}
 
 		if self.enable_cache == false {
-			let script = create_expression(input.to_string());
+			let script = create_expression_tree(&input);
 			
 			return script.eval(&mut self.variables);
 		}
@@ -604,7 +676,7 @@ impl MolangParser {
 				script.eval(&mut self.variables)
 			},
 			None => {
-				let script = create_expression(input.to_string());
+				let script = create_expression_tree(&input);
 				
 				let result = script.eval(&mut self.variables);
 
