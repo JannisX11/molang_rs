@@ -57,9 +57,9 @@ mod math {
 		}
 	}
 	
-	pub fn in_range(value: f64, min: f64, max: f64) -> f64 {
+	/*pub fn in_range(value: f64, min: f64, max: f64) -> f64 {
 		if value <= max && value >= min {1.0} else {0.0}
-	}
+	}*/
 
 	/*pub fn all(value: f64, ...to_compare) {
 		return (to_compare.findIndex(c => c !== value) === -1) {1.0} else {0.0};
@@ -75,6 +75,11 @@ mod math {
 }
 
 static ANGLE_FACTOR: f64 = std::f64::consts::PI / 180.0;
+
+lazy_static! {
+    pub static ref STRING_NUMBER_REGEX: Regex = Regex::new(r"^-?\d+(\.\d+f?)?$").unwrap();
+    pub static ref ALLOCATION_REGEX: Regex = Regex::new(r"^(temp|variable|t|v)\.\w+=").unwrap();
+}
 
 // Operation Types
 #[derive(Debug)]
@@ -164,21 +169,15 @@ fn to_variable_name(input: &str) -> String {
 
 
 // String parsing utility
-
-const BRACKET_OPEN: char = '(';
-const BRACKET_CLOSE: char = ')';
-const CURLY_BRACKET_OPEN: char = '{';
-const CURLY_BRACKET_CLOSE: char = '}';
-
 fn split_string<'a>(s: &'a str, c: &str) -> Option<(&'a str, &'a str)> {
     if !s.contains(c) {
         return None;
     }
     let mut level: i8 = 0;
     for (i, ch) in s.char_indices() {
-        if ch == BRACKET_OPEN || ch == CURLY_BRACKET_OPEN {
+        if ch == '(' || ch == '{' {
             level += 1;
-        } else if ch == BRACKET_CLOSE || ch == CURLY_BRACKET_CLOSE {
+        } else if ch == ')' || ch == '}' {
             level -= 1;
         } else if level == 0 && c.starts_with(ch) {
             if c.len() == 1 || &s[i..i+c.len()] == c {
@@ -196,9 +195,9 @@ fn split_string_reverse<'a>(s: &'a str, c: &str) -> Option<(&'a str, &'a str)> {
     let mut level: i8 = 0;
     for i in (0..s.len()).rev() {
         let ch = s.chars().nth(i).unwrap();
-        if ch == BRACKET_OPEN || ch == CURLY_BRACKET_OPEN {
+        if ch == '(' || ch == '{' {
             level -= 1;
-        } else if ch == BRACKET_CLOSE || ch == CURLY_BRACKET_CLOSE {
+        } else if ch == ')' || ch == '}' {
             level += 1;
         } else if level == 0 && c.starts_with(ch) {
             if c.len() == 1 || &s[i..i+c.len()] == c {
@@ -221,8 +220,8 @@ fn split_string_multiple<'a>(s: &'a str, c: &str) -> Vec<&'a str> {
 
     for (i, ch) in s.char_indices() {
 		match ch {
-			BRACKET_OPEN|CURLY_BRACKET_OPEN => {level += 1},
-			BRACKET_CLOSE|CURLY_BRACKET_CLOSE => {level -= 1},
+			'('|'{' => {level += 1},
+			')'|'}' => {level -= 1},
 			_ => {
 				if level == 0 && c.starts_with(ch) {
 					if c_len == 1 || &s[i..i+c_len] == c {
@@ -247,18 +246,17 @@ fn compare_values(a: &Expression, b: &Expression, variables: &mut HashMap<String
 	return result_a == result_b;
 }
 
-static STRING_NUMBER_REGEX: &str = r"^-?\d+(\.\d+f?)?$";
 fn is_string_number(s: &str) -> bool {
-	Regex::new(STRING_NUMBER_REGEX).unwrap().is_match(s)
+	STRING_NUMBER_REGEX.is_match(s)
 }
 
 fn can_trim_brackets(s: &str) -> bool {
-	if (s.starts_with(BRACKET_OPEN) && s.ends_with(BRACKET_CLOSE)) || (s.starts_with(CURLY_BRACKET_OPEN) && s.ends_with(CURLY_BRACKET_CLOSE)) {
+	if (s.starts_with('(') && s.ends_with(')')) || (s.starts_with('{') && s.ends_with('}')) {
 		let mut level: i8 = 1;
 		for c in s[1..s.len()-1].chars() {
 			match c {
-				BRACKET_OPEN|CURLY_BRACKET_OPEN => level += 1,
-				BRACKET_CLOSE|CURLY_BRACKET_CLOSE => level -= 1,
+				'('|'{' => level += 1,
+				')'|'}' => level -= 1,
 				_ => {}
 			}
 			if level == 0 {
@@ -324,7 +322,7 @@ fn parse_string_slice(input: &str) -> Expression {
 
 	//allocation
 	if has_equal_sign && s.len() > 4 {
-		let mat = Regex::new(r"^(temp|variable|t|v)\.\w+=").unwrap().find(s);
+		let mat = ALLOCATION_REGEX.find(s);
 		match mat {
 			Some(result) => {
 
@@ -499,7 +497,7 @@ fn parse_string_slice(input: &str) -> Expression {
 	/*split = s.match(/[a-z0-9._]{2,}/g)
 	if (split && split.length === 1 && split[0].length >= s.length-2) {
 		return s;
-	} else if (s.includes(BRACKET_OPEN) && s[s.length-1] == ')') {
+	} else if (s.includes('(') && s[s.length-1] == ')') {
 		let begin = s.search(/\(/);
 		let query_name = s.substr(0, begin);
 		let inner = s.substr(begin+1, s.length-begin-2)

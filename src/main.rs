@@ -1,6 +1,9 @@
 use crate::molang::MolangParser;
 use std::time::Instant;
 
+#[macro_use]
+extern crate lazy_static;
+
 pub mod molang;
 
 
