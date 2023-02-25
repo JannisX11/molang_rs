@@ -32,7 +32,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-	fn run(input: &str) -> f64 {
+	fn run(input: &str) -> f32 {
 		use crate::molang::MolangParser;
 		let mut parser = MolangParser::new();
 

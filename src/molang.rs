@@ -4,17 +4,17 @@ use regex::Regex;
 mod math {
 	use rand::Rng;
 
-	pub fn random(a: f64, b: f64) -> f64 {
+	pub fn random(a: f32, b: f32) -> f32 {
 		let mut rng = rand::thread_rng();
 		rng.gen_range(a..b)
 	}
 
-	pub fn random_int(a: f64, b: f64) -> f64 {
+	pub fn random_int(a: f32, b: f32) -> f32 {
 		let mut rng = rand::thread_rng();
 		rng.gen_range(a..(b+1.0)).floor()
 	}
 
-	pub fn die_roll(num: f64, low: f64, high: f64) -> f64 {
+	pub fn die_roll(num: f32, low: f32, high: f32) -> f32 {
 		let iterations = num.max(0.0) as i32;
 		let mut sum = 0.0;
 		for _i in 0..iterations {
@@ -23,7 +23,7 @@ mod math {
 		return sum;
 	}
 
-	pub fn die_roll_int(num: f64, low: f64, high: f64) -> f64 {
+	pub fn die_roll_int(num: f32, low: f32, high: f32) -> f32 {
 		let iterations = num.max(0.0) as i32;
 		let mut sum = 0.0;
 		for _i in 0..iterations {
@@ -32,15 +32,15 @@ mod math {
 		return sum;
 	}
 
-	pub fn lerp(start: f64, end: f64, lerp: f64) -> f64 {
+	pub fn lerp(start: f32, end: f32, lerp: f32) -> f32 {
 		return start + (end - start) * lerp;
 	}
 
-	fn radify(num: f64) -> f64 {
+	fn radify(num: f32) -> f32 {
 		(((num + 180.0) % 360.0) +180.0) % 360.0
 	}
 
-	pub fn lerp_rotate(start: f64, end: f64, lerp: f64) -> f64 {
+	pub fn lerp_rotate(start: f32, end: f32, lerp: f32) -> f32 {
 		let mut a = radify(start);
 		let mut b = radify(end);
 
@@ -57,24 +57,24 @@ mod math {
 		}
 	}
 	
-	/*pub fn in_range(value: f64, min: f64, max: f64) -> f64 {
+	/*pub fn in_range(value: f32, min: f32, max: f32) -> f32 {
 		if value <= max && value >= min {1.0} else {0.0}
 	}*/
 
-	/*pub fn all(value: f64, ...to_compare) {
+	/*pub fn all(value: f32, ...to_compare) {
 		return (to_compare.findIndex(c => c !== value) === -1) {1.0} else {0.0};
 	}
 
-	pub fn any(value: f64, ...to_compare) {
+	pub fn any(value: f32, ...to_compare) {
 		return to_compare.findIndex(c => c == value) >= 0 {1.0} else {0.0};
 	}
 
-	pub fn approx_eq(value: f64, ...to_compare) {
+	pub fn approx_eq(value: f32, ...to_compare) {
 		return (to_compare.findIndex(c => Math.abs(value - c) > 0.0000001) === -1) {1.0} else {0.0};
 	}*/
 }
 
-static ANGLE_FACTOR: f64 = std::f64::consts::PI / 180.0;
+static ANGLE_FACTOR: f32 = std::f32::consts::PI / 180.0;
 
 lazy_static! {
     pub static ref STRING_NUMBER_REGEX: Regex = Regex::new(r"^-?\d+(\.\d+f?)?$").unwrap();
@@ -130,7 +130,7 @@ enum OperationType {
 // Tree Types
 #[derive(Debug)]
 enum Expression {
-	Number(f64),
+	Number(f32),
 	//String(String),
 	Operation1(OperationType, Box<Expression>),
 	Operation2(OperationType, Box<Expression>, Box<Expression>),
@@ -238,7 +238,7 @@ fn split_string_multiple<'a>(s: &'a str, c: &str) -> Vec<&'a str> {
 	pieces
 	
 }
-fn compare_values(a: &Expression, b: &Expression, variables: &mut HashMap<String, f64>) -> bool {
+fn compare_values(a: &Expression, b: &Expression, variables: &mut HashMap<String, f32>) -> bool {
 	let result_a = a.eval(variables);
 	let result_b = b.eval(variables);
 	//if (!(typeof a == 'string' && a[0] == `'`)) a = eval(a, true);
@@ -425,7 +425,7 @@ fn parse_string_slice(input: &str) -> Expression {
 
 	if s.starts_with("math.") {
 		if s == "math.pi" {
-			return Expression::Number(std::f64::consts::PI);
+			return Expression::Number(std::f32::consts::PI);
 		}
 		let arg_begin: usize = match s.find("(") {
 			Some(index) => {
@@ -513,7 +513,7 @@ fn parse_string_slice(input: &str) -> Expression {
 
 
 impl Expression {
-	fn eval(&self, variables: &mut HashMap<String, f64>) -> f64 {
+	fn eval(&self, variables: &mut HashMap<String, f32>) -> f32 {
 		match self {
 			Expression::Number(num) => num.to_owned(),
 			/*Expression::String(_string) => {
@@ -612,14 +612,14 @@ impl Expression {
 			},
 			Expression::Loop(count, scope) => {
 				let iterations = count.eval(variables) as i32;
-				let mut return_value: f64 = 0.0;
+				let mut return_value: f32 = 0.0;
 				for _i in 0..iterations {
 					return_value = scope.eval(variables);
 				}
 				return_value
 			},
 			Expression::Scope(lines) => {
-				let mut return_value: f64 = 0.0;
+				let mut return_value: f32 = 0.0;
 				for line in lines.iter() {
 					return_value = line.eval(variables);
 				}
@@ -641,7 +641,7 @@ fn create_expression_tree(string: &str) -> Expression {
 
 pub struct MolangParser {
 	cache: HashMap<String, Expression>,
-	variables: HashMap<String, f64>,
+	variables: HashMap<String, f32>,
 	pub enable_cache: bool
 }
 impl MolangParser {
@@ -652,7 +652,7 @@ impl MolangParser {
 			enable_cache: true
 		}
 	}
-	pub fn parse(&mut self, input: String) -> f64 {
+	pub fn parse(&mut self, input: String) -> f32 {
 
 		if input.len() == 0 {
 			return 0.0;
